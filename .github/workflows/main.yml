@@ -3,8 +3,9 @@ name: Main
 on:
   push:
     paths-ignore:
-      - '.gitignore'
-      - '*.md'
+      - ".gitignore"
+      - "*.md"
+  pull_request:
 
 jobs:
   lint:
@@ -15,18 +16,19 @@ jobs:
       - name: Run clang-format style check
         uses: jidicula/clang-format-action@v4.9.0
         with:
-          clang-format-version: '15'
-          exclude-regex: 'extern'
+          clang-format-version: "15"
+          exclude-regex: "extern"
 
   build:
     strategy:
       fail-fast: false
       matrix:
-        build_type: ['Debug', 'Release']
+        build_type: ["Debug", "Release"]
         config:
-          - { name: '🍏 macOS Clang', os: macos-latest }
-          - { name: '🐧 Linux GCC', os: ubuntu-latest }
-          - { name: '🪟 Windows MSVC', os: windows-latest }
+          - { name: "🍏 macOS Clang", os: macos-latest }
+          - { name: "🐧 Linux GCC", os: ubuntu-latest }
+          - { name: "🪟 Windows MSVC", os: windows-latest }
+          - { name: "🔩 RISCV64 GCC", os: ubuntu-latest }
 
     name: 🛠 Build / ${{ matrix.config.name }} (${{ matrix.build_type }})
     runs-on: ${{ matrix.config.os }}
@@ -56,22 +58,28 @@ jobs:
         if: matrix.config.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Setup RISCV64 (Ubuntu)
+        if: matrix.config.name == '🔩 RISCV64 GCC'
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          max-size: '10G'
+          max-size: "10G"
           key: ${{ matrix.config.os }}-${{ matrix.build_type }}
 
       - name: Configure
-        run: >
+        if: ${{ matrix.config.name == '🔩 RISCV64 GCC' }}
+        run: |
           mkdir GDExtension-build
+          cmake -B GDExtension-build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} --install-prefix ${{ github.workspace }}/install-${{ matrix.build_type }} -DCMAKE_TOOLCHAIN_FILE=riscv64-toolchain.cmake .
 
-          cmake
-          -B GDExtension-build
-          -G "Ninja"
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          --install-prefix ${{ github.workspace }}/install-${{ matrix.build_type }}
-          .
+      - name: Configure
+        if: ${{ matrix.config.name != '🔩 RISCV64 GCC' }}
+        run: |
+          mkdir GDExtension-build
+          cmake -B GDExtension-build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} --install-prefix ${{ github.workspace }}/install-${{ matrix.build_type }} .
 
       - name: Build
         run: cmake --build GDExtension-build
